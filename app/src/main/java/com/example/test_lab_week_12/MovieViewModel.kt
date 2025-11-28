@@ -8,11 +8,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class MovieViewModel(private val movieRepository: MovieRepository) : ViewModel() {
 
-    private val _popularMovies = MutableStateFlow(emptyList<Movie>())
+    private val _popularMovies = MutableStateFlow<List<Movie>>(emptyList())
     val popularMovies: StateFlow<List<Movie>> = _popularMovies
 
     private val _error = MutableStateFlow("")
@@ -24,12 +26,23 @@ class MovieViewModel(private val movieRepository: MovieRepository) : ViewModel()
 
     private fun fetchPopularMovies() {
         viewModelScope.launch(Dispatchers.IO) {
+
             movieRepository.fetchMovies()
-                .catch { e ->
-                    _error.value = "Error loading movies: ${e.message}"
+                .map { movies ->
+
+                    val currentYear = Calendar.getInstance().get(Calendar.YEAR).toString()
+                    // filter movies descending by popularity while using flow
+                    movies
+                        .filter { movie ->
+                            movie.releaseDate?.startsWith(currentYear) == true
+                        }
+                        .sortedByDescending { it.popularity }
                 }
-                .collect { movies ->
-                    _popularMovies.value = movies
+                .catch { e ->
+                    _error.value = "Error: ${e.message}"
+                }
+                .collect { filteredMovies ->
+                    _popularMovies.value = filteredMovies
                 }
         }
     }
